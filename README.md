@@ -1,6 +1,6 @@
 # Climate
 
-Driver for the climate-si7020 Tessel climate module ([Si7005](http://www.silabs.com/Support%20Documents/TechnicalDocs/Si7020.pdf)).
+Driver for the climate-si7020 Tessel climate module ([Si7020](http://www.silabs.com/Support%20Documents/TechnicalDocs/Si7020.pdf)).
 
 **Not to be confused with the [climate-si7005](https://github.com/tessel/climate-si7005) Tessel climate module**
 
@@ -8,7 +8,7 @@ Driver for the climate-si7020 Tessel climate module ([Si7005](http://www.silabs.
 
 The module may come with a protective white cover over the sensor, as shown in the image below. This cover is permeable and does *not* need to be removed before use. If the protective cover is removed, avoid touching, poking, or dirtying the exposed silicon die.
 
-![Climate module with protective cover still in place](https://s3.amazonaws.com/technicalmachine-assets/doc+pictures/protective-cover.jpg)
+![Climate module with protective cover still in place](https://s3.amazonaws.com/technicalmachine-assets/doc+pictures/climate-si7020.jpg)
 
 ##Installation
 ```sh
@@ -16,13 +16,22 @@ npm install climate-si7020
 ```
 ##Example
 ```js
-var hardwareapi = require('tessel').port['A'];
+var tessel = require('tessel');
+var climatelib = require('climate-si7020');
+var climate = climatelib.use(tessel.port['A']);
 
-var climate = require('climate-si7020').use(hardwareapi);
-climate.on('ready', function () {
-  climate.readTemperature('f', function (err, temp) {
-    console.log('Degrees:', temp.toFixed(4) + 'F');
-  });
+climate.on('ready', function(){
+  setInterval(function(){
+    climate.readHumidity(function(err, humid){
+      climate.readTemperature('f', function(err, temp){
+        console.log('Degrees:', temp.toFixed(4) + 'F', 'Humidity:', humid.toFixed(4) + '%RH');
+      });
+    });
+  }, 1000);
+});
+
+climate.on('error', function(err) {
+  console.log('error connecting module', err);
 });
 ```
 
