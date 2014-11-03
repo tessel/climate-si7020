@@ -5,7 +5,7 @@
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tessel/climate-si7020"
+    "url": "git@github.com:tessel/climate-si7020.git"
   },
   "readmeFilename:" : "README.md",
   "directories": {
