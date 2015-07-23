@@ -3,26 +3,25 @@
   "version": "0.1.1",
   "description": "The library for using the Climate si7020 module for Tessel. Get temperature and humidity.",
   "main": "index.js",
+  "files": [ "index.js" ],
   "repository": {
     "type": "git",
     "url": "git@github.com:tessel/climate-si7020.git"
   },
-  "readmeFilename:" : "README.md",
   "directories": {
     "example": "examples"
   },
-  "dependencies": {
-  },
   "scripts": {
-    "test": "./test.js"
+    "test": "tessel run test.js | tap-spec",
+    "test-t2": "t2 run test.js | tap-spec"
   },
   "hardware": {
     "./examples": false
   },
   "devDependencies": {
-    "tape": "~2.3.2",
-    "tap": "git+https://github.com/tcr/node-tap.git#3cb76e",
-    "shelljs": "~0.3.0"
+    "async-series": "0.0.1",
+    "tap-spec": "^4.0.2",
+    "tape": "^4.0.1"
   },
   "author": "team@technical.io",
   "license": "MIT/Apache 2.0"
