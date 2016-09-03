@@ -1,4 +1,5 @@
 # Climate
+[![Code of Conduct](https://img.shields.io/badge/%E2%9D%A4-code%20of%20conduct-blue.svg?style=flat)](https://github.com/tessel/project/blob/master/CONDUCT.md)
 
 Driver for the climate-si7020 Tessel climate module ([Si7020](http://www.silabs.com/Support%20Documents/TechnicalDocs/Si7020.pdf)).
 
