@@ -7,9 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-var events = require('events');
-var util = require('util');
-
+const { EventEmitter } = require('events');
 
 /**
  * Configuration
@@ -17,7 +15,7 @@ var util = require('util');
 
 // Datasheet: http://www.silabs.com/Support%20Documents/TechnicalDocs/Si7020.pdf
 
-var
+const
   RH_HOLD = 0xE5,
   RH_NOHOLD = 0xF5,
   TEMP_HOLD = 0xE3,
@@ -26,6 +24,8 @@ var
   RESET = 0xFE,
   WRITE_USER_REG = 0xE6,
   READ_USER_REG = 0xE7,
+  WRITE_HTRE_REG = 0x51;
+  READ_HTRE_REG = 0x11;
   READ_IDh = [0xFA, 0x0F],
   READ_IDl = [0xFC, 0xC9],
   READ_FIRMWARE = [0x84, 0xB8],
@@ -39,149 +39,131 @@ var
   WAKE_UP_TIME  = 15,
 
 /* Constants */
+  ID = 0x14, // identifies si2070 according to the datasheet
   I2C_ADDRESS = 0x40,
   DATAh = 0x01, // Relative Humidity or Temperature, High Byte
-  DATAl = 0x02; // Relative Humidity or Temperature, Low Byte
+  DATAl = 0x02, // Relative Humidity or Temperature, Low Byte
 
   HTRE = 0x04; // heater flag
+
+function noop() {}
 
 /**
  * ClimateSensor
  */
+class ClimateSensor extends EventEmitter {
+  constructor(hardware) {
+    super();
+    this.hardware = hardware;
 
-function ClimateSensor (hardware) {
-  this.hardware = hardware;
+    this.i2c = this.hardware.I2C(I2C_ADDRESS);
 
-  // I2C object for address
-  this.i2c = this.hardware.I2C(I2C_ADDRESS);
+    setTimeout(() => {
+      this._readRegister(READ_IDl, 6, (_, data) => {
+        if (data[0] == ID) {
+          this.emit('ready');
+        } else {
+          this.emit('error', new Error(`Cannot connect to Si7020. Are you sure it's not a Si7005? Got id: ${data[0].toString(16)}`));
+        }
+      });
+    }, WAKE_UP_TIME);
+  }
 
-  var self = this;
+  _readRegister(data, numberOfBytes, next = noop) {
+    this.i2c.transfer(Buffer.from(data), numberOfBytes, next);
+  }
 
-  setTimeout(function () {
-    self._readRegister(READ_IDl, 6, function(err, data){
-      if (data[0] == 0x14) { // 0x14 identifies si7020 according to the datasheet
-        self.emit('ready');
-      } else {
-        self.emit('error', new Error('Cannot connect to Si7020. Are you sure it\'s not a Si7005? Got id: ' + data[0].toString(16)));
+  _writeRegister(data, next = noop) {
+    this.i2c.send(Buffer.from(data), next);
+  }
+
+  getData(command, next) {
+    setTimeout(() => {
+      this._writeRegister([command], () => {
+        this._readRegister([], 3, next);
+      });
+    }, WAKE_UP_TIME);
+  }
+
+  readHumidity(next = noop) {
+    /**
+    Read and return the relative humidity
+
+    Args
+      next
+        Callback; gets error, relHumidity as args
+    */
+    this.getData(RH_HOLD, (error, register) => {
+      if (error) {
+        return next(error);
       }
+
+      const rawHumidity = (register[0] << 8) + register[1];
+      const humidity = (rawHumidity * HUMIDITY_SLOPE) - HUMIDITY_OFFSET;
+
+      next(null, humidity);
     });
-  }, WAKE_UP_TIME);
+  }
+
+  readTemperature(type, next) {
+    /**
+    Read and return the temperature. Celcius by default, Farenheit if type === 'f'
+
+    Args
+      type
+        if type === 'f', use Farenheit
+      next
+        Callback; gets err, temperature as args
+    */
+    next = next || type;
+
+    this.getData(TEMP_HOLD, (error, register) => {
+      if (error) {
+        return next(error);
+      }
+
+      const rawTemperature = (register[0] << 8) + register[1];
+      let temp = (rawTemperature * TEMPERATURE_SLOPE) - TEMPERATURE_OFFSET;
+
+      if (type === 'f') {
+        temp = temp * (9/5) + 32;
+      }
+
+      next(null, temp);
+    });
+  }
+
+  setHeater(status, next = noop) {
+    /**
+    Turn the chip's internal heater on or off. Enabling the heater will drive
+    condensation off of the sensor, thereby reducing its hysteresis and allowing
+    for more accurate humidity measurements in high humidity conditions.
+
+    Note that this will interfere with (raise) temperature mesurement.
+
+    Args
+      status
+        true = heater on, false = heater off
+    */
+    let register = status ? HTRE : 0;
+
+    this._writeRegister([READ_USER_REG], () => {
+      this._readRegister([], 1, (error, data) => {
+        if (error) {
+          return next(error);
+        }
+
+        register |= data[0];
+
+        if (!status) {
+          register &= ~(1 << 2);
+        }
+
+        this._writeRegister([WRITE_USER_REG, register], next);
+      });
+    });
+  }
 }
 
-util.inherits(ClimateSensor, events.EventEmitter);
-
-ClimateSensor.prototype._readRegister = function (data, num, next) {
-  this.i2c.transfer(new Buffer(data), num, function (err, ret) {
-    if (next) {
-      next(err, ret);
-    }
-  });
-};
-
-ClimateSensor.prototype._writeRegister = function (data, next) {
-  this.i2c.send(new Buffer(data), next);
-};
-
-ClimateSensor.prototype.getData = function (configValue, next) {
-
-  var cmd = [configValue];
-  //  Wait until the chip wakes up
-  var self = this;
-  setTimeout(function () {
-    self._writeRegister(cmd, function () {
-      setImmediate(function untilready () {
-        self._readRegister([], 3, function (err, data) {
-          next(err, data);
-        });
-      });
-    });
-  }, WAKE_UP_TIME);
-};
-
-ClimateSensor.prototype.readHumidity = function (next) {
-  /**
-  Read and return the relative humidity
-
-  Args
-    next
-      Callback; gets err, relHumidity as args
-  */
-  var self = this;
-  this.getData(RH_HOLD, function (err, reg) {
-    var rawHumidity = (reg[0] << 8) + reg[1];
-    var humidity = ( rawHumidity * HUMIDITY_SLOPE ) - HUMIDITY_OFFSET;
-
-    if (next) {
-      next(null, humidity);
-    }
-  });
-};
-
-ClimateSensor.prototype.readTemperature = function (/*optional*/ type, next) {
-  /**
-  Read and return the temperature. Celcius by default, Farenheit if type === 'f'
-
-  Args
-    type
-      if type === 'f', use Farenheit
-    next
-      Callback; gets err, temperature as args
-  */
-  next = next || type;
-
-  var self = this;
-  this.getData(TEMP_HOLD, function (err, reg) {
-    var rawTemperature = (reg[0] << 8) + reg[1];
-    var temp = ( rawTemperature * TEMPERATURE_SLOPE ) - TEMPERATURE_OFFSET;
-
-    if (type === 'f') {
-      temp = temp * (9/5) + 32;
-    }
-
-    next(null, temp);
-  });
-};
-
-ClimateSensor.prototype.setHeater = function (status, next) {
-  /**
-  Turn the chip's internal heater on or off. Enabling the heater will drive
-  condensation off of the sensor, thereby reducing its hysteresis and allowing
-  for more accurate humidity measurements in high humidity conditions.
-
-  Note that this will interfere with (raise) temperature mesurement.
-
-  Args
-    status
-      true = heater on, false = heater off
-  */
-  var reg = 0;
-  if (status) {
-    reg = HTRE;
-  } 
-
-  // now write the user config register
-  var self = this;
-
-  self._writeRegister([READ_USER_REG], function(){
-    self._readRegister([], 1, function(err, data){
-      reg |= data[0];
-      if (!status){
-        reg &= ~(1 << 2);
-      }
-      self._writeRegister([WRITE_USER_REG, reg], function(){
-        next && next();
-      });
-    });
-  });
-};
-
-
-/**
- * Module API
- */
-
 exports.ClimateSensor = ClimateSensor;
-
-exports.use = function (hardware) {
-  return new ClimateSensor(hardware);
-};
+exports.use = (hardware) => new ClimateSensor(hardware);
