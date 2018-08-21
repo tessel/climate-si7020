@@ -1,0 +1,14 @@
+{
+  "name": "climate-example",
+  "version": "0.0.0",
+  "description": "Tessel project",
+  "main": "climate.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "Tessel"
+  ],
+  "license": "MIT",
+  "readme": "A bare bones Tessel 2 climate script."
+}

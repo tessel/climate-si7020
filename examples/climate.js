@@ -6,21 +6,38 @@ This basic climate example logs a stream
 of temperature and humidity to the console.
 *********************************************/
 
-var tessel = require('tessel');
-var climatelib = require('../');
-var climate = climatelib.use(tessel.port['A']);
+const { promisify } = require('util');
+const tessel = require('tessel');
+const climatelib = require('./module');
+const climate = climatelib.use(tessel.port['A']);
 
-climate.on('ready', function(){
+const setHeater = promisify(climate.setHeater).bind(climate);
+const readHumidity = promisify(climate.readHumidity).bind(climate);
+const readTemperature = promisify(climate.readTemperature).bind(climate);
+
+climate.on('ready', async () => {
   console.log("Connected to si7020");
-  setInterval(function(){
-    climate.readHumidity(function(err, humid){
+
+  console.log('Turning on the heater');
+  await setHeater(true);
+
+  setInterval(async () => {
+    const [humidity, temp] = await Promise.all([
+      readHumidity(),
+      readTemperature('f'),
+    ]);
+
+    console.log(`Degrees: ${temp.toFixed(4)}\n Humidity: ${humidity.toFixed(4)}%RH`);
+      /*
+    climate.readHumidity((_, humid) => {
       climate.readTemperature('f', function(err, temp){
         console.log('Degrees:', temp.toFixed(4) + 'F', 'Humidity:', humid.toFixed(4) + '%RH');
       });
     });
+    */
   }, 1000);
 });
 
-climate.on('error', function(err) {
-  console.log('error connecting module', err);
+climate.on('error', (error) => {
+  console.log('error connecting module', error);
 });
